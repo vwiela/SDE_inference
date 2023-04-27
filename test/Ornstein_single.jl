@@ -95,8 +95,57 @@ Random.seed!(123)
 param_info_new = change_start_val_to_pilots(param_info, file_loc, filter_opt, sampler_name = "Ram_sampler")
 mcmc_sampler = init_mcmc_pilot(mcmc_sampler, file_loc, filter_opt.rho)
 # Actual main run 
-filter_opt = init_filter(BootstrapEm(), dt, rho=rho, n_particles=40) # From pilot run use 10 particles 
+filter_opt = init_filter(BootstrapEm(), dt, rho=rho, n_particles=10) # From pilot run use 10 particles 
 samples, log_lik_val, sampler = run_mcmc(50000, mcmc_sampler, param_info_new, filter_opt, sde_mod, deepcopy(file_loc))   
+
+burn_in = 20000
+p1 = density(samples[1, burn_in:end])
+p1 = vline!([-0.7])
+p2 = density(samples[2, burn_in:end])
+p2 = vline!([2.3])
+p3 = density(samples[3, burn_in:end])
+p3 = vline!([-0.9])
+
+# Letus try with modified diffusion bridge (here we need special form on SDE-model)
+Random.seed!(123)
+P = ones(Int64, 1, 1)
+sde_mod = init_sde_model(alpha_ornstein_full, 
+                         beta_ornstein_full, 
+                         calc_x0_ornstein!, 
+                         ornstein_obs, 
+                         prob_ornstein_full,
+                         1, 1, 
+                         P)
+dt = 1e-2
+rho = 0.99 # Correlation level 
+filter_opt = init_filter(ModDiffusion(), dt, rho=rho)
+
+# Set file paths 
+path_data = joinpath(@__DIR__, "Ornstein_model", "Simulated_data.csv")
+file_loc = init_file_loc(path_data, "Ornstein_single", dir_save = joinpath(@__DIR__, "Ornstein_model", "Single_individual_mod_bridge"))
+
+# For Gibbs-step 1&2 adaptive mcmc
+cov_mat = diagm([0.1, 0.1, 0.1, 0.1])
+mcmc_sampler = init_mcmc(RamSampler(), param_info, step_before_update=100, cov_mat=cov_mat)
+
+# Options for pilot run
+Random.seed!(123)
+pilot_run_info = init_pilot_run([prior_ind_param, prior_error_param], 
+                                 n_particles_pilot=100, 
+                                 n_samples_pilot=3000,
+                                 n_particles_investigate=[20, 50],
+                                 n_times_run_filter=200,
+                                 rho_list=[0.99])
+tune_particles_single_individual(pilot_run_info, mcmc_sampler, param_info, filter_opt, sde_mod, deepcopy(file_loc))
+
+# Main inference run 
+# Get values from pilot run 
+Random.seed!(123)
+param_info_new = change_start_val_to_pilots(param_info, file_loc, filter_opt, sampler_name = "Ram_sampler")
+mcmc_sampler = init_mcmc_pilot(mcmc_sampler, file_loc, filter_opt.rho)
+# Actual main run 
+filter_opt = init_filter(ModDiffusion(), dt, rho=rho, n_particles=10) # From pilot run use 10 particles 
+samples, log_lik_val, sampler = run_mcmc(50000, mcmc_sampler, param_info_new, filter_opt, sde_mod, deepcopy(file_loc))  
 
 burn_in = 20000
 p1 = density(samples[1, burn_in:end])
