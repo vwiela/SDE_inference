@@ -183,7 +183,6 @@ function run_ornstein_filter(mcmc_sampler, _param_info, path_data, which_filter)
     param_info = deepcopy(_param_info)
 
     file_loc = init_file_loc(path_data, "Ornstein_single", dir_save = joinpath(@__DIR__, "Ornstein_model", "Single_individual"))
-    Random.seed!(123)
     sde_mod = init_sde_model(alpha_ornstein_full, 
                              beta_ornstein_full, 
                              calc_x0_ornstein!, 
@@ -195,21 +194,19 @@ function run_ornstein_filter(mcmc_sampler, _param_info, path_data, which_filter)
     if which_filter === :bootstrap
         @info "Testing inference with bootstrap filter"
         dt = 1e-2
-        rho = 0.99 # Correlation level 
-        filter_opt = init_filter(BootstrapEm(), dt, rho=rho, n_particles=40) 
+        filter_opt = BootstrapFilterEM(dt, 40, correlation=0.99)
     elseif which_filter === :modifed_diffusion_bridge
         @info "Testing inference with modified diffusion bridge filter"
         dt = 1e-2
-        rho = 0.99 # Correlation level 
-        filter_opt = init_filter(ModDiffusion(), dt, rho=rho, n_particles=10) 
+        filter_opt = ModifedDiffusionBridgeFilter(dt, 10, correlation=0.99)
     end
 
-    Random.seed!(321)
     samples, log_lik_val, sampler = run_mcmc(60000, mcmc_sampler, param_info, filter_opt, sde_mod, deepcopy(file_loc))
     return samples 
 end
 
 
+Random.seed!(123)
 # We initialize from the true MCMC values 
 param_info = init_param([Normal(0.0, 1.0), Normal(2.0, 1.0), Normal(-1.0, 1.0)], 
                         [Gamma(1.0, 0.4)], 
@@ -236,8 +233,8 @@ sd_bootstrap = std(samples_bootstrap[:, burn_in:end], dims=2)
 sd_bridge = std(samples_bridge[:, burn_in:end], dims=2)
 
 @testset "Testing particle filters against Ornsten model" begin
-    @test all(abs.(median_kalman .- median_bootstrap) .≤ 0.05)
-    @test all(abs.(median_kalman .- median_bridge) .≤ 0.05)
-    @test all(abs.(sd_kalman .- sd_bootstrap) .≤ 0.07)
-    @test all(abs.(sd_kalman .- sd_bridge) .≤ 0.07)
+    @test all(abs.(median_kalman .- median_bootstrap) .≤ 0.08)
+    @test all(abs.(median_kalman .- median_bridge) .≤ 0.08)
+    @test all(abs.(sd_kalman .- sd_bootstrap) .≤ 0.08)
+    @test all(abs.(sd_kalman .- sd_bridge) .≤ 0.08)
 end

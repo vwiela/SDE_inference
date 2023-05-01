@@ -117,13 +117,6 @@ struct RamSampler
 end
 
 
-"""
-    BootstrapFilterEm
-
-Arrays (drift, diffusion and state-arrays + step-length) required for propegating particles using the Bootstrap-EM filter. 
-
-Pre-allocated for computational efficiency. 
-"""
 struct BootstrapSolverObj{T1<:MArray,
                           T2<:MArray,
                           T3<:MArray,
@@ -132,8 +125,8 @@ struct BootstrapSolverObj{T1<:MArray,
     alpha_vec::T1
     beta_mat::T2
     x_vec::T3
-    delta_t::Vector{T4}
-    sqrt_delta_t::Vector{T4}
+    Δt::Vector{T4}
+    sqrt_Δt::Vector{T4}
 end
 
 
@@ -173,8 +166,8 @@ struct DiffBridgeSolverObj{T1<:MArray,
     P_mat::T4
     P_mat_t::T5
     x_vec::T6
-    delta_t::T7
-    sqrt_delta_t::T7
+    Δt::T7
+    sqrt_Δt::T7
 end
 
 
@@ -298,34 +291,54 @@ end
 
 
 """
-    BootstrapFilterEm
+    BootstrapFilterEM
 
-Options: time-step size (dt), number of particles, correlation level for Euler-Maruyama SDE bootstrap filter. 
+Bootstrap-filter with n-particles for SDE:s, where the SDE is solved by the Euler-Maruyama with step length Δt.
 
-If rho ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
+If correlation ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
 """
-struct BootstrapFilterEm{T1<:AbstractFloat, T2<:Signed}
-    delta_t::T1
+struct BootstrapFilterEM{T1<:AbstractFloat, T2<:Signed}
+    Δt::T1
     n_particles::T2
-    rho::T1    
+    ρ::T1    
 end
-struct BootstrapEm
+"""
+    BootstrapFilterEM(Δt, n_particles; correlation=0.99)
+
+Constructor for bootstrap filter for SDE:s. The default correlation level of 0.99 often performs well.
+
+!!! note
+    The step-length and number of particles should be set as low as possible to reduce run-time.
+"""
+function BootstrapFilterEM(Δt, n_particles; correlation=0.99)
+    @assert correlation < 1 && correlation ≥ 0 "For the bootstrap filter correltation must be in the intervall [0, 1)"
+    return BootstrapFilterEM(Δt, n_particles, correlation)
 end
 
 
 """
-    ModDiffusionFilter
+    ModifedDiffusionBridgeFilter
 
-Options: time-step size (dt), number of particles, correlation level for modified diffusion bridge SDE bootstrap filter. 
+Modified-diffusion guided particle-filter with n-particles for SDE:s, where the SDE is solved by the Euler-Maruyama with step length Δt.
 
-If rho ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
+If correlation ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
 """
-struct ModDiffusionFilter{T1<:AbstractFloat, T2<:Signed}
-    delta_t::T1
+struct ModifedDiffusionBridgeFilter{T1<:AbstractFloat, T2<:Signed}
+    Δt::T1
     n_particles::T2
-    rho::T1    
+    ρ::T1    
 end
-struct ModDiffusion
+"""
+    ModifedDiffusionBridgeFilter(Δt, n_particles; correlation=0.99)
+
+Constructor for guided modified diffusion bridge particle filter for SDE:s. The default correlation level of 0.99 often performs well.
+
+!!! note
+    The step-length and number of particles should be set as low as possible to reduce run-time.
+"""
+function ModifedDiffusionBridgeFilter(Δt, n_particles; correlation=0.99)
+    @assert correlation < 1 && correlation ≥ 0 "For the bootstrap filter correltation must be in the intervall [0, 1)"
+    return ModifedDiffusionBridgeFilter(Δt, n_particles, correlation)
 end
 
 
@@ -433,4 +446,15 @@ struct ParamInfoInd{T1<:Array{<:AbstractFloat, 1},
     pos_ind_param::Array{Bool, 1}
     log_ind_param::Array{Bool, 1}
     n_param::T2
+end
+
+
+import Base.show 
+function show(io::IO, filter::BootstrapFilterEM)
+    printstyled("BootstrapFilterEM", color=116)
+    @printf(" with %d particles, correlation = %.3f and Euler-Maruyama step-length = %.1e", filter.n_particles, filter.ρ, filter.Δt)
+end
+function show(io::IO, filter::ModifedDiffusionBridgeFilter)
+    printstyled("ModifedDiffusionBridgeFilter", color=116)
+    @printf(" with %d particles, correlation = %.3f and Euler-Maruyama step-length = %.1e", filter.n_particles, filter.ρ, filter.Δt)
 end

@@ -301,7 +301,7 @@ function posterior_vc(samples, model::SdeModel, file_loc, param_info, filter, in
     file_name = "pVC_" * file_loc.model_name * 
         "_npart" * string(filter.n_particles) * 
         "_nsamp" * string(n_samples) * 
-        "_corr" * string(filter.rho) * ".csv"
+        "_corr" * string(filter.ρ) * ".csv"
     path_save = file_loc.dir_save * "/" * file_name
     # Aggregate data 
     full_data = vcat(quant, collect(t_vec)')'
@@ -349,7 +349,7 @@ function write_result_to_file(samples, log_lik_val, param_info, filter, file_loc
     run_id = 1
     file_name =  "Npart" * string(n_particles) * 
         "_nsamp" * string(n_samples) * 
-        "_corr" * string(filter.rho) * 
+        "_corr" * string(filter.ρ) * 
         "_run" * string(run_id) * ".csv"
     path_save = file_loc.dir_save * "/" * file_name
 
@@ -358,7 +358,7 @@ function write_result_to_file(samples, log_lik_val, param_info, filter, file_loc
             run_id += 1
             file_name = "Npart" * string(n_particles) * 
                 "_nsamp" * string(n_samples) * 
-                "_corr" * string(filter.rho) *
+                "_corr" * string(filter.ρ) *
                 "_run" * string(run_id) * ".csv"
             path_save = file_loc.dir_save * "/" * file_name
         else
@@ -443,7 +443,7 @@ function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; 
 
     # Print some data 
     @printf("Running single individual inference with: ")
-    @printf("%d particles and correlation level %.3f\n", n_particles, filter.rho)
+    @printf("%d particles and correlation level %.3f\n", n_particles, filter.ρ)
 
     # Initialise the random numbers 
     rand_num_old = create_rand_num(ind_data, model, filter)

@@ -10,14 +10,14 @@
 
 
 """
-    create_n_step_vec(t_vec, delta_t)
+    create_n_step_vec(t_vec, Δt)
 
 Calculate number of time-steps for EM-solver between each observed time-point 
 
-The discretization level (delta_t) is provided by the user, and should be 
+The discretization level (Δt) is provided by the user, and should be 
 small enough to ensure accuracy, while keeping computational effiency. 
 """
-function create_n_step_vec(t_vec, delta_t)
+function create_n_step_vec(t_vec, Δt)
     # Adapt length of n_step if t[1] != 0
     len_step = 0
     zero_in_t = false
@@ -32,13 +32,13 @@ function create_n_step_vec(t_vec, delta_t)
 
     # Special case where t = 0 is not observed
     if !zero_in_t
-        n_step[1] = convert(Int16, round((t_vec[1] - 0.0) / delta_t))
+        n_step[1] = convert(Int16, round((t_vec[1] - 0.0) / Δt))
         i_n_step += 1
     end
 
     # Fill the step-vector
     for i_t_vec in 2:length(t_vec)
-        n_steps = round((t_vec[i_t_vec] - t_vec[i_t_vec-1]) / delta_t)
+        n_steps = round((t_vec[i_t_vec] - t_vec[i_t_vec-1]) / Δt)
         n_step[i_n_step] = convert(Int16, n_steps)
         i_n_step += 1
     end
@@ -51,7 +51,7 @@ end
 
 
 """
-    init_ind_data(path::String, delta_t::Float64)
+    init_ind_data(path::String, Δt::Float64)
 
 Create IndData-struct using provided path to data-file and time-discretization. 
 
@@ -62,7 +62,7 @@ See also: [`IndData`](@ref)
 function init_ind_data(data_obs::DataFrame, filter_opt; cov_name::T1=[""]) where T1<:Array{<:String, 1}
 
     
-    delta_t = filter_opt.delta_t
+    Δt = filter_opt.Δt
     t_vec::Array{Float64, 1} = deepcopy(convert(Array{Float64, 1}, data_obs[!, "time"]))
     unique!(t_vec); sort!(t_vec)
 
@@ -99,7 +99,7 @@ function init_ind_data(data_obs::DataFrame, filter_opt; cov_name::T1=[""]) where
         cov_vals = Array{Float64, 1}(undef, 0)
     end 
 
-    ind_data = IndData(t_vec, y_mat, create_n_step_vec(t_vec, delta_t), cov_vals)
+    ind_data = IndData(t_vec, y_mat, create_n_step_vec(t_vec, Δt), cov_vals)
 
     return ind_data
 end
@@ -131,9 +131,9 @@ function create_rand_num(ind_data::IndData, sde_mod::SdeModel, filter; rng::Mers
     end
 
     # Numbers used for systematic resampling
-    if filter.rho == 0
+    if filter.ρ == 0
         u_sys_res = rand(rng, length(ind_data.t_vec))
-    elseif filter.rho != 0
+    elseif filter.ρ != 0
         u_sys_res = randn(rng, Float64, length(ind_data.t_vec))
     end
     
@@ -143,7 +143,7 @@ end
 
 """
     update_random_numbers!(rand_num::RandomNumbers, 
-                           filter::BootstrapFilterEm;
+                           filter::BootstrapFilterEM;
                            rng::MersenneTwister=MersenneTwister())
 
     
@@ -154,12 +154,12 @@ If the particles are correlated particles u are updated via a Crank-Nichelson sc
 Overwrites the rand_num with the new random-numbers. 
 """
 function update_random_numbers!(rand_num::RandomNumbers, 
-                                filter::BootstrapFilterEm;
+                                filter::BootstrapFilterEM;
                                 rng::MersenneTwister=MersenneTwister())
 
     n_time_step_updates = length(rand_num.u_prop)
     # Update u-propegation in case of no correlation 
-    if filter.rho == 0
+    if filter.ρ == 0
         for i in 1:n_time_step_updates
             randn!(rng, rand_num.u_prop[i])
         end
@@ -167,34 +167,34 @@ function update_random_numbers!(rand_num::RandomNumbers,
         # Resampling random-numbers 
         rand!(rng, rand_num.u_resamp)
 
-    elseif filter.rho != 0
+    elseif filter.ρ != 0
     # Note, propegation numbers become normal if using correlation 
-        std::Float64 = sqrt(1 - filter.rho^2)
+        std::Float64 = sqrt(1 - filter.ρ^2)
         for i in 1:n_time_step_updates
             dim = size(rand_num.u_prop[i])
-            rand_num.u_prop[i] .= (filter.rho .* rand_num.u_prop[i]) + randn(rng, Float64, dim) *std 
+            rand_num.u_prop[i] .= (filter.ρ .* rand_num.u_prop[i]) + randn(rng, Float64, dim) *std 
         end
 
         dim = size(rand_num.u_resamp)
-        rand_num.u_resamp .= (filter.rho .* rand_num.u_resamp) + randn(rng, Float64, dim) * std
+        rand_num.u_resamp .= (filter.ρ .* rand_num.u_resamp) + randn(rng, Float64, dim) * std
     end
 end
 """
     update_random_numbers!(rand_num_new::RandomNumbers, 
                            rand_num_old::RandomNumbers, 
-                           filter::BootstrapFilterEm;
+                           filter::BootstrapFilterEM;
                            rng::MersenneTwister=MersenneTwister())
 
 Using rand_num_old the new-random numbers are stored in rand_num_new.
 """
 function update_random_numbers!(rand_num_new::RandomNumbers, 
                                 rand_num_old::RandomNumbers, 
-                                filter::BootstrapFilterEm;
+                                filter::BootstrapFilterEM;
                                 rng::MersenneTwister=MersenneTwister())
 
     n_time_step_updates = length(rand_num_new.u_prop)
     # Update u-propegation in case of no correlation 
-    if filter.rho == 0
+    if filter.ρ == 0
         for i in 1:n_time_step_updates
             randn!(rng, rand_num_new.u_prop[i])
         end
@@ -202,23 +202,23 @@ function update_random_numbers!(rand_num_new::RandomNumbers,
         # Resampling random-numbers 
         rand!(rng, rand_num_new.u_resamp)
 
-    elseif filter.rho != 0
+    elseif filter.ρ != 0
     # Note, propegation numbers become normal if using correlation 
-        std::Float64 = sqrt(1 - filter.rho^2)
+        std::Float64 = sqrt(1 - filter.ρ^2)
         for i in 1:n_time_step_updates
             randn!(rand_num_new.u_prop[i])
             rand_num_new.u_prop[i] .*= std
-            rand_num_new.u_prop[i] .+= filter.rho .* rand_num_old.u_prop[i]
+            rand_num_new.u_prop[i] .+= filter.ρ .* rand_num_old.u_prop[i]
         end
 
         randn!(rand_num_new.u_resamp)
         rand_num_new.u_resamp .*= std
-        rand_num_new.u_resamp .+= filter.rho .* rand_num_old.u_resamp
+        rand_num_new.u_resamp .+= filter.ρ .* rand_num_old.u_resamp
     end
 end
 """
     update_random_numbers!(rand_num::RandomNumbers, 
-                           filter::ModDiffusionFilter;
+                           filter::ModifedDiffusionBridgeFilter;
                            rng::MersenneTwister=MersenneTwister())
 
     
@@ -227,12 +227,12 @@ Update random numbers, auxillerary variables, (propegation and resampling) for t
 Same approach as bootstrap EM. 
 """
 function update_random_numbers!(rand_num::RandomNumbers, 
-                                filter::ModDiffusionFilter, 
+                                filter::ModifedDiffusionBridgeFilter, 
                                 rng::MersenneTwister=MersenneTwister())
 
     n_time_step_updates = length(rand_num.u_prop)
     # Update u-propegation in case of no correlation 
-    if filter.rho == 0
+    if filter.ρ == 0
         for i in 1:n_time_step_updates
             randn!(rng, rand_num.u_prop[i])
         end
@@ -240,32 +240,32 @@ function update_random_numbers!(rand_num::RandomNumbers,
         # Resampling random-numbers 
         rand!(rng, rand_num.u_resamp)
 
-    elseif filter.rho != 0
+    elseif filter.ρ != 0
     # Note, propegation numbers become normal if using correlation 
-        std::Float64 = sqrt(1 - filter.rho^2)
+        std::Float64 = sqrt(1 - filter.ρ^2)
         for i in 1:n_time_step_updates
             dim = size(rand_num.u_prop[i])
-            rand_num.u_prop[i] .= (filter.rho .* rand_num.u_prop[i]) + randn(rng, Float64, dim) *std 
+            rand_num.u_prop[i] .= (filter.ρ .* rand_num.u_prop[i]) + randn(rng, Float64, dim) *std 
         end
 
         dim = size(rand_num.u_resamp)
-        rand_num.u_resamp .= (filter.rho .* rand_num.u_resamp) + randn(rng, Float64, dim) * std
+        rand_num.u_resamp .= (filter.ρ .* rand_num.u_resamp) + randn(rng, Float64, dim) * std
     end
 end
 """
     update_random_numbers!(rand_num_new::RandomNumbers, 
                            rand_num_old::RandomNumbers, 
-                           filter::ModDiffusionFilter;
+                           filter::ModifedDiffusionBridgeFilter;
                            rng::MersenneTwister=MersenneTwister())
 """
 function update_random_numbers!(rand_num_new::RandomNumbers, 
                                 rand_num_old::RandomNumbers, 
-                                filter::ModDiffusionFilter;
+                                filter::ModifedDiffusionBridgeFilter;
                                 rng::MersenneTwister=MersenneTwister())
 
     n_time_step_updates = length(rand_num_new.u_prop)
     # Update u-propegation in case of no correlation 
-    if filter.rho == 0
+    if filter.ρ == 0
         for i in 1:n_time_step_updates
             randn!(rng, rand_num_new.u_prop[i])
         end
@@ -273,18 +273,18 @@ function update_random_numbers!(rand_num_new::RandomNumbers,
         # Resampling random-numbers 
         rand!(rng, rand_num_new.u_resamp)
 
-    elseif filter.rho != 0
+    elseif filter.ρ != 0
     # Note, propegation numbers become normal if using correlation 
-        std::Float64 = sqrt(1 - filter.rho^2)
+        std::Float64 = sqrt(1 - filter.ρ^2)
         for i in 1:n_time_step_updates
             randn!(rng, rand_num_new.u_prop[i])
             rand_num_new.u_prop[i] .*= std
-            rand_num_new.u_prop[i] .+= filter.rho .* rand_num_old.u_prop[i]
+            rand_num_new.u_prop[i] .+= filter.ρ .* rand_num_old.u_prop[i]
         end
 
         randn!(rng, rand_num_new.u_resamp)
         rand_num_new.u_resamp .*= std
-        rand_num_new.u_resamp .+= filter.rho .* rand_num_old.u_resamp
+        rand_num_new.u_resamp .+= filter.ρ .* rand_num_old.u_resamp
     end
 end
 
@@ -348,93 +348,6 @@ function systematic_resampling!(index_sampling::Array{UInt32, 1}, weights::Array
         u += delta_u
     end
 end
-
-
-"""
-    init_filter(filter::BootstrapEm, dt; n_particles=1000, rho=0.0) 
-
-Initialise bootstrap particle filter struct for a SDE-model using Euler-Maruyama-stepper. 
-
-By default a non-correlated particle filter is used (rho = 0.0). Step-length for 
-Euler-Maruyama should be as large as possible, while still ensuring numerical accuracy. 
-
-# Args
-- `filter`: particle filter to use, BootstrapEm() = Bootstrap filter with Euler-Maruyama stepper
-- `dt`: Euler-Maruyama step-length 
-- `n_particles`: number of particles to use when estimating the likelihood
-- `rho`: correlation level. rho ∈ [0.0, 1.0) and if rho = 0.0 the particles are uncorrelated. 
-"""
-function init_filter(filter::BootstrapEm,
-                     dt;
-                     n_particles=1000,
-                     rho=0.0) 
-    
-    # Ensure correct type in calculations 
-    dt = convert(Float64, dt)
-    rho = convert(Float64, rho)
-    filter_opt = BootstrapFilterEm(dt, n_particles, rho)
-    return filter_opt
-end
-"""
-    init_filter(filter::ModDiffusion, dt; n_particles=1000, rho=0.0) 
-
-Initialise modified diffusion bridge filter for a SDE-model. 
-
-By default a non-correlated particle filter is used (rho = 0.0). Step-length for the bridge
-should be as large as possible, while still ensuring numerical accuracy. 
-
-# Args
-- `filter`: particle filter to use, ModDiffusion() = Modified diffusion bridge for SDE-models 
-- `dt`: Modified diffusion bridge step-length 
-- `n_particles`: number of particles to use when estimating the likelihood
-- `rho`: correlation level. rho ∈ [0.0, 1.0) and if rho = 0.0 the particles are uncorrelated. 
-"""
-function init_filter(filter::ModDiffusion,
-                     dt::Float64;
-                     n_particles=1000,
-                     rho=0.0) 
-    
-    # Ensure correct type in calculations 
-    dt::Float64 = convert(Float64, dt)
-    rho::Float64 = convert(Float64, rho)
-    filter_opt = ModDiffusionFilter(dt, n_particles, rho)
-    return filter_opt
-end
-
-
-"""
-    change_filter_opt(filter::BootstrapFilterEm, n_particles, rho)
-
-Create a deepcopy of a Bootstrap EM-filter with new number of particles and correlation-level rho.  
-
-Used by pilot-run functions to investigate different particles. 
-"""
-function change_filter_opt(filter::BootstrapFilterEm, n_particles, rho)
-
-    new_filter = BootstrapFilterEm(    
-        filter.delta_t,
-        n_particles,
-        rho)
-    new_filter = deepcopy(new_filter)
-
-    return new_filter
-end
-"""
-    change_filter_opt(filter::ModDiffusionFilter, n_particles::T1, rho::Float64) where T1<:Signed
-
-Create a deepcopy of a modified-diffusion bridge filter with new number of particles and correlation-level rho.  
-"""
-function change_filter_opt(filter::ModDiffusionFilter, n_particles::T1, rho::Float64) where T1<:Signed
-
-    new_filter = ModDiffusionFilter(    
-        filter.delta_t,
-        n_particles,
-        rho)
-    new_filter = deepcopy(new_filter)
-
-    return new_filter
-end
-
 
 
 """
@@ -529,9 +442,9 @@ correct sub-directory for saving the result. User does not access this function.
 See also: [`FileLocations`, `init_file_loc`](@ref)
 """
 function calc_dir_save!(file_loc::FileLocations, filter, mcmc_sampler; mult_ind=false)
-    if filter.rho != 0
+    if filter.ρ != 0
         tag_corr = "/Correlated"
-    elseif filter.rho == 0
+    elseif filter.ρ == 0
         tag_corr = "/Not_correlated"
     end
 

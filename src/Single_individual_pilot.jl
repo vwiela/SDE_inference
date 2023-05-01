@@ -5,7 +5,7 @@
                    n_pilot_runs=1, 
                    n_samples_pilot=1000, 
                    n_particles_pilot=10000, 
-                   rho_list::Array{Float64, 1}=[0.0],
+                   ρ_list::Array{Float64, 1}=[0.0],
                    n_particles_investigate=[10, 50, 100, 500, 1000], 
                    n_times_run_filter=1000)
 
@@ -27,7 +27,7 @@ estimate of the variance.
 - `n_pilot_runs`: If Arg2 or Arg3 equals random, decides the number of pilot-runs 
 - `n_samples_pilot`: Number of mcmc-sampler steps in pilot run. 
 - `n_particles_pilot`: Number of particles to use in pilot-run. 
-- `rho_list`: Correlation-values to investigate when tuning filter 
+- `ρ_list`: Correlation-values to investigate when tuning filter 
     at central posterior location obtained from pilot-run. 
 - `n_particles_investigate`: Array of particles to investigate when tuning filter 
     at central posterior location obtained from pilot-run. 
@@ -42,7 +42,7 @@ function init_pilot_run(model_prior;
                         n_pilot_runs=1, 
                         n_samples_pilot=1000, 
                         n_particles_pilot=10000, 
-                        rho_list::Array{Float64, 1}=[0.0],
+                        ρ_list::Array{Float64, 1}=[0.0],
                         n_particles_investigate=[10, 50, 100, 500, 1000], 
                         n_times_run_filter=1000)
 
@@ -97,7 +97,7 @@ function init_pilot_run(model_prior;
                                                  ind_param,
                                                  error_param, 
                                                  n_times_run_filter, 
-                                                 rho_list)
+                                                 ρ_list)
         
         push!(pilot_run_info_array, pilot_run_info)
     end
@@ -167,7 +167,7 @@ function check_if_pilot_result_exists(file_loc, filter, n_samples, param_info)
     data_central_pos = CSV.read(file_name, DataFrame)
     filter!(row -> row[:n_particles] == filter.n_particles, data_central_pos)
     filter!(row -> row[:n_samples] == n_samples, data_central_pos)
-    filter!(row -> row[:correlation] == filter.rho, data_central_pos)
+    filter!(row -> row[:correlation] == filter.ρ, data_central_pos)
 
     # Case central-position values exist 
     if issubset(init_value, data_central_pos[!, "init_val"]) == true
@@ -236,7 +236,7 @@ function run_pilot_run(n_samples, mcmc_sampler, param_info, model,
             n_particles = repeat([filter.n_particles], n_param), 
             i_exp = repeat([i_exp], n_param), 
             n_samples = repeat([n_samples], n_param), 
-            correlation = repeat([filter.rho], n_param))
+            correlation = repeat([filter.ρ], n_param))
 
         CSV.write(file_name, data_save)
     else 
@@ -247,7 +247,7 @@ function run_pilot_run(n_samples, mcmc_sampler, param_info, model,
             n_particles = repeat([filter.n_particles], n_param), 
             i_exp = repeat([i_exp], n_param), 
             n_samples = repeat([n_samples], n_param), 
-            correlation = repeat([filter.rho], n_param))
+            correlation = repeat([filter.ρ], n_param))
         CSV.write(file_name, data_save, append=true)
     end
 
@@ -270,7 +270,7 @@ Tune the number of particles for a single-individual.
 
 For a specific model, filter and individual (mod_param) runs the particle filter 
 and increases the number of particles until variance is below the target variance. 
-If filter is correlated, target variance is calculated as 2.16²/ (1 - rho^2). 
+If filter is correlated, target variance is calculated as 2.16²/ (1 - ρ^2). 
 If not-correlated, target variance equals 2, based on recomendations by Wiqvist et al. 
 Returns the number of particles to use. 
 
@@ -290,7 +290,7 @@ function investigate_different_particles(n_times_run_filter,
     while particles_use < 5000
 
         filter_var = change_filter_opt(filter_opt, particles_use, 0.0)
-        filter_use = change_filter_opt(filter_opt, particles_use, filter_opt.rho)
+        filter_use = change_filter_opt(filter_opt, particles_use, filter_opt.ρ)
 
         j = 1
         log_lik_vals::Array{Float64, 1} = Array{Float64, 1}(undef, n_times_run_filter)
@@ -310,10 +310,10 @@ function investigate_different_particles(n_times_run_filter,
         est_var = var(log_lik_vals)
 
         # In case of correlation, calculate target variance 
-        if filter_use.rho == 0
+        if filter_use.ρ == 0
             target_var = 2.0
 
-        elseif filter_use.rho != 0
+        elseif filter_use.ρ != 0
             log_lik_vec1 = Array{Float64, 1}(undef, n_times_run_filter)
             log_lik_vec2 = Array{Float64, 1}(undef, n_times_run_filter)
             # Run-filter to get correlation 
@@ -394,12 +394,12 @@ function tune_particles_single_individual(pilot_run_info,
     for i in 1:length(pilot_run_info)
         # Run for the different correlation levels for a specific start-guess 
         pilot_run_data = pilot_run_info[i]
-        rho_list = pilot_run_data.rho_list
+        ρ_list = pilot_run_data.ρ_list
         n_times_run_filter = pilot_run_data.n_times_run_filter
-        for j in 1:length(rho_list)
+        for j in 1:length(ρ_list)
 
             # Ensure correct parameters for running the pilot-run 
-            filter_pilot = change_filter_opt(filter, pilot_run_data.n_particles_pilot, rho_list[j])
+            filter_pilot = change_filter_opt(filter, pilot_run_data.n_particles_pilot, ρ_list[j])
             param_info_pilot = change_param_info(param_info, 
                                                  pilot_run_data.init_ind_param, 
                                                  pilot_run_data.init_error)
@@ -434,7 +434,7 @@ function tune_particles_single_individual(pilot_run_info,
 
             # Investigate the provided number of particles 
             @printf("\nTesting particles for experiment = %d ", i_exp)
-            @printf("using a correlation level of = %.3f\n", filter_pilot.rho)
+            @printf("using a correlation level of = %.3f\n", filter_pilot.ρ)
 
             particles_use = investigate_different_particles(n_times_run_filter, filter_pilot, mod_param, file_loc_use, model)
 
@@ -466,12 +466,12 @@ See also: [`InitParameterInfo`](@ref)
 function change_start_val_to_pilots(param_info, file_loc, filter;
      sampler_name="Gen_am_sampler", exp_id=1)
 
-    rho = filter.rho 
+    ρ = filter.ρ 
 
     # Ensure that correct pilot run is searched for 
-    if rho != 0
+    if ρ != 0
         tag_corr = "/Correlated/"
-    elseif rho == 0
+    elseif ρ == 0
         tag_corr = "/Not_correlated/"
     end
 
@@ -499,9 +499,9 @@ function change_start_val_to_pilots(param_info, file_loc, filter;
     data = CSV.read(file_data, DataFrame)
 
     # Filter out-specific correlation level 
-    filter!(row -> row[:correlation] == rho, data)
+    filter!(row -> row[:correlation] == ρ, data)
     if size(data)[1] == 0
-        @printf("Pilot-run data does not exist for provided rho %.3f\n", rho)
+        @printf("Pilot-run data does not exist for provided ρ %.3f\n", ρ)
         return 1
     end
     # Filter out correct experiment 
@@ -522,16 +522,16 @@ end
 
 
 """
-    init_filter_pilot(filter_opt, file_loc, rho, sampler_name; exp_tag::T=1) where T<:Signed
+    init_filter_pilot(filter_opt, file_loc, ρ, sampler_name; exp_tag::T=1) where T<:Signed
 
 Initialise a filter with the number of particles obtained from the tuning in the pilot-run. 
 """
-function init_filter_pilot(filter_opt, file_loc, rho, sampler_name; exp_tag::T=1) where T<:Signed
+function init_filter_pilot(filter_opt, file_loc, ρ, sampler_name; exp_tag::T=1) where T<:Signed
 
     # Ensure that correct pilot run is searched for 
-    if rho != 0
+    if ρ != 0
         tag_corr = "/Correlated/"
-    elseif rho == 0
+    elseif ρ == 0
         tag_corr = "/Not_correlated/"
     end
 
@@ -554,7 +554,7 @@ function init_filter_pilot(filter_opt, file_loc, rho, sampler_name; exp_tag::T=1
     
     n_particles_use = convert(Int64, readdlm(file_data, '\t', Float64, '\n')[1, 1])
 
-    filter_use = change_filter_opt(filter_opt, n_particles_use, rho)
+    filter_use = change_filter_opt(filter_opt, n_particles_use, ρ)
     return filter_use 
 
 end

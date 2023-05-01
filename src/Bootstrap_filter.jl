@@ -24,14 +24,14 @@ function init_sol_object_bootstrap(::Val{dim_model}, ::Val{dim_model_obs}, sde_m
     
     x_curr = zeros(MVector{dim_model, Float64})
 
-    delta_t = Array{Float64, 1}(undef, 1)
-    sqrt_delta_t = Array{Float64, 1}(undef, 1)
+    Δt = Array{Float64, 1}(undef, 1)
+    sqrt_Δt = Array{Float64, 1}(undef, 1)
 
     solver_obj = BootstrapSolverObj(alpha_vec,
                                     beta_mat,
                                     x_curr,
-                                    delta_t,
-                                    sqrt_delta_t)
+                                    Δt,
+                                    sqrt_Δt)
 
     return solver_obj
 end
@@ -54,8 +54,8 @@ function step_em_bootstrap!(p::DynModInput,
                             u_vec::V, 
                             t::Float64) where {S<:SdeModel, V<:AbstractVector}
 
-    delta_t::Float64 = so.delta_t[1]
-    sqrt_delta_t::Float64 = so.sqrt_delta_t[1]
+    Δt::Float64 = so.Δt[1]
+    sqrt_Δt::Float64 = so.sqrt_Δt[1]
 
     # Calculate beta and alpha arrays 
     sde_mod.calc_alpha(so.alpha_vec, so.x_vec, p, t)
@@ -64,7 +64,7 @@ function step_em_bootstrap!(p::DynModInput,
     # Cholesky, overwrite beta-matrix for propegation 
     calc_cholesky!(so.beta_mat, sde_mod.dim)
 
-    so.x_vec .+= so.alpha_vec*delta_t .+ so.beta_mat*u_vec .* sqrt_delta_t
+    so.x_vec .+= so.alpha_vec*Δt .+ so.beta_mat*u_vec .* sqrt_Δt
 
 end
 
@@ -95,10 +95,10 @@ function propegate_em_bootstrap!(x::Array{Float64, 2},
                                  u::Array{Float64, 2}) where {T1<:Signed}
     
     # Stepping options for the EM-stepper
-    delta_t::Float64 = (t_step_info.t_end - t_step_info.t_start) / t_step_info.n_step
-    solver_obj.delta_t[1] = delta_t
-    solver_obj.sqrt_delta_t[1] = sqrt(delta_t)
-    t_vec = t_step_info.t_start:delta_t:t_step_info.t_end
+    Δt::Float64 = (t_step_info.t_end - t_step_info.t_start) / t_step_info.n_step
+    solver_obj.Δt[1] = Δt
+    solver_obj.sqrt_Δt[1] = sqrt(Δt)
+    t_vec = t_step_info.t_start:Δt:t_step_info.t_end
     
     # Update each particle (note x is overwritten)
     @inbounds for i in 1:n_particles
@@ -122,7 +122,7 @@ end
 
 
 """
-    run_filter(filt_opt::BootstrapFilterEm,
+    run_filter(filt_opt::BootstrapFilterEM,
                model_parameters::ModelParameters, 
                random_numbers::RandomNumbers, 
                sde_mod::SdeModel, 
@@ -134,15 +134,15 @@ Each filter takes the input filt_opt, model-parameter, random-numbers, model-str
 individual_data. The filter is optmised to be fast and memory efficient on a single-core. 
 
 # Args
-- `filt_opt`: filter options (BootstrapFilterEm-struct)
+- `filt_opt`: filter options (BootstrapFilterEM-struct)
 - `model_parameters`: none-transfmored unknown model-parameters (ModelParameters)
 - `random_numbers`: auxillerary variables, random-numbers, used to estimate the likelihood (RandomNumbers-struct)
 - `sde_mod`: underlaying SDE-model for calculating likelihood (SdeModel struct)
 - `individual_data`: observed data, and number of time-steps to perform between data-points (IndData-struct)
 
-See also: [`BootstrapFilterEm`, `ModelParameters`, `RandomNumbers`, `SdeModel`, `IndData`]
+See also: [`BootstrapFilterEM`, `ModelParameters`, `RandomNumbers`, `SdeModel`, `IndData`]
 """
-function run_filter(filt_opt::BootstrapFilterEm,
+function run_filter(filt_opt::BootstrapFilterEM,
                     model_parameters::ModelParameters, 
                     random_numbers::RandomNumbers, 
                     sde_mod::SdeModel, 
@@ -195,7 +195,7 @@ function run_filter(filt_opt::BootstrapFilterEm,
 
     # If correlated-filter, convert standard-normal resampling numbers to 
     # standard uniform 
-    if filt_opt.rho != 0
+    if filt_opt.ρ != 0
         u_resamp_vec_tmp = deepcopy(random_numbers.u_resamp)
         u_resamp_vec_tmp = cdf(Normal(), u_resamp_vec_tmp)
     else
@@ -233,7 +233,7 @@ function run_filter(filt_opt::BootstrapFilterEm,
     for i_t_vec in 2:1:len_t_vec    
         
         # If correlated, sort x_curr
-        if filt_opt.rho != 0
+        if filt_opt.ρ != 0
             data_sort = sum(x_curr.^2, dims=1)[1, :]
             i_sort = sortperm(data_sort)
             x_curr = x_curr[:, i_sort]

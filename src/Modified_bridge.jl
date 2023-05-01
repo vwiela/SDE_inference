@@ -65,8 +65,8 @@ function init_sol_object(::Val{dim_model}, ::Val{dim_model_obs}, sde_mod::SdeMod
     P_mat = deepcopy(sde_mod.P_mat)
     P_mat_t = deepcopy(sde_mod.P_mat')
 
-    delta_t = Array{Float64, 1}(undef, 1)
-    sqrt_delta_t = Array{Float64, 1}(undef, 1)
+    Δt = Array{Float64, 1}(undef, 1)
+    sqrt_Δt = Array{Float64, 1}(undef, 1)
 
     solver_obj = DiffBridgeSolverObj(mean_vec,
                                      alpha_vec,
@@ -76,8 +76,8 @@ function init_sol_object(::Val{dim_model}, ::Val{dim_model_obs}, sde_mod::SdeMod
                                      P_mat,
                                      P_mat_t,
                                      x_curr,
-                                     delta_t,
-                                     sqrt_delta_t)
+                                     Δt,
+                                     sqrt_Δt)
 
     return solver_obj
 end
@@ -105,15 +105,15 @@ function modified_diffusion_calc_arrays!(p::DynModInput,
     sde_mod.calc_beta(so.beta_mat, so.x_vec, p, t)
 
     # Structs for calculating mean and covariance
-    delta_t::Float64 = so.delta_t[1]
-    sqrt_delta_t::Float64 = so.sqrt_delta_t[1]
+    Δt::Float64 = so.Δt[1]
+    sqrt_Δt::Float64 = so.sqrt_Δt[1]
 
     # Calculate new mean and covariance values 
     inv_term = so.beta_mat*so.P_mat*inv(so.P_mat_t*so.beta_mat*so.P_mat*delta_k + so.sigma_mat)
 
     so.mean_vec .= so.alpha_vec .+ inv_term * (y_vec - so.P_mat_t * (so.x_vec + so.alpha_vec * delta_k))
     
-    so.cov_mat .= so.beta_mat .- inv_term*so.P_mat_t*so.beta_mat*delta_t
+    so.cov_mat .= so.beta_mat .- inv_term*so.P_mat_t*so.beta_mat*Δt
 
 end
 
@@ -135,24 +135,24 @@ function modified_diffusion_propegate!(prob_em::Array{Float64, 1},
                                        i_particle::T1, 
                                        sde_mod::SdeModel) where T1<:Signed
      
-    delta_t::Float64 = so.delta_t[1]
-    sqrt_delta_t::Float64 = so.sqrt_delta_t[1]
+    Δt::Float64 = so.Δt[1]
+    sqrt_Δt::Float64 = so.sqrt_Δt[1]
 
     # Must calculate mean-vectors before propegating (when calculcating logpdf)
-    mean_vec_bridge = so.x_vec + so.mean_vec*delta_t
-    mean_vec_em = so.x_vec + so.alpha_vec*delta_t
+    mean_vec_bridge = so.x_vec + so.mean_vec*Δt
+    mean_vec_em = so.x_vec + so.alpha_vec*Δt
 
     # Note, for propegation and then log-pdf cholesky decompositon is required for cov-mat and beta 
     calc_cholesky!(so.cov_mat, sde_mod.dim)
     calc_cholesky!(so.beta_mat, sde_mod.dim)
 
     # Propegate
-    so.x_vec .+= so.mean_vec*delta_t + so.cov_mat*u_vec * sqrt_delta_t
+    so.x_vec .+= so.mean_vec*Δt + so.cov_mat*u_vec * sqrt_Δt
     map_to_zero!(so.x_vec, sde_mod.dim)
     
     # Update probabilities, cov_mat and beta-mat are both lower-triangular cholesky
-    prob_bridge[i_particle] += calc_log_pdf_mvn(so.x_vec, mean_vec_bridge, so.cov_mat*sqrt_delta_t, sde_mod.dim)
-    prob_em[i_particle] += calc_log_pdf_mvn(so.x_vec, mean_vec_em, so.beta_mat*sqrt_delta_t, sde_mod.dim)
+    prob_bridge[i_particle] += calc_log_pdf_mvn(so.x_vec, mean_vec_bridge, so.cov_mat*sqrt_Δt, sde_mod.dim)
+    prob_em[i_particle] += calc_log_pdf_mvn(so.x_vec, mean_vec_em, so.beta_mat*sqrt_Δt, sde_mod.dim)
     
 end
 
@@ -183,11 +183,11 @@ function propegate_modified_diffusion!(x::Array{Float64, 2},
     p::DynModInput = mod_param.individual_parameters
     error_parameters::Array{Float64, 1} = mod_param.error_parameters
     # Stepping options for the EM-stepper
-    delta_t::Float64 = (t_step_info.t_end - t_step_info.t_start) / t_step_info.n_step
+    Δt::Float64 = (t_step_info.t_end - t_step_info.t_start) / t_step_info.n_step
     t_end::Float64 = t_step_info.t_end
-    t_vec = t_step_info.t_start:delta_t:t_step_info.t_end
-    solver_obj.delta_t[1] = delta_t
-    solver_obj.sqrt_delta_t[1] = sqrt(delta_t)
+    t_vec = t_step_info.t_start:Δt:t_step_info.t_end
+    solver_obj.Δt[1] = Δt
+    solver_obj.sqrt_Δt[1] = sqrt(Δt)
     solver_obj.sigma_mat[diagind(solver_obj.sigma_mat)] .= error_parameters.^2
 
     # Update each particle (note x is overwritten)
@@ -217,7 +217,7 @@ end
 
 
 """
-    run_filter(filt_opt::ModDiffusionFilter,
+    run_filter(filt_opt::ModifedDiffusionBridgeFilter,
                model_parameters::ModelParameters, 
                random_numbers::RandomNumbers, 
                sde_mod::SdeModel, 
@@ -229,15 +229,15 @@ Each filter takes the input filt_opt, model-parameter, random-numbers, model-str
 individual_data. The filter is optmised to be fast and memory efficient on a single-core. 
 
 # Args
-- `filt_opt`: filter options (ModDiffusionFilter-struct)
+- `filt_opt`: filter options (ModifedDiffusionBridgeFilter-struct)
 - `model_parameters`: none-transfmored unknown model-parameters (ModelParameters)
 - `random_numbers`: auxillerary variables, random-numbers, used to estimate the likelihood (RandomNumbers-struct)
 - `sde_mod`: underlaying SDE-model for calculating likelihood (SdeModel struct)
 - `individual_data`: observed data, and number of time-steps to perform between data-points (IndData-struct)
 
-See also: [`ModDiffusionFilter`, `ModelParameters`, `RandomNumbers`, `SdeModel`, `IndData`]
+See also: [`ModifedDiffusionBridgeFilter`, `ModelParameters`, `RandomNumbers`, `SdeModel`, `IndData`]
 """
-function run_filter(filt_opt::ModDiffusionFilter,
+function run_filter(filt_opt::ModifedDiffusionBridgeFilter,
                     model_parameters::ModelParameters, 
                     random_numbers::RandomNumbers, 
                     sde_mod::SdeModel, 
@@ -297,7 +297,7 @@ function run_filter(filt_opt::ModDiffusionFilter,
 
     # If correlated-filter, convert standard-normal resampling numbers to 
     # standard uniform 
-    if filt_opt.rho != 0
+    if filt_opt.ρ != 0
         u_resamp_vec_tmp = deepcopy(random_numbers.u_resamp)
         u_resamp_vec_tmp = cdf(Normal(), u_resamp_vec_tmp)
     else
@@ -350,7 +350,7 @@ function run_filter(filt_opt::ModDiffusionFilter,
     for i_t_vec in 2:1:len_t_vec    
 
         # If correlated, sort x_curr
-        if filt_opt.rho != 0
+        if filt_opt.ρ != 0
             data_sort = sum(x_curr.^2, dims=1)[1, :]
             i_sort = sortperm(data_sort)
             x_curr = x_curr[:, i_sort]
