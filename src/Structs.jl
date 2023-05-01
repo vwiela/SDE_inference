@@ -117,29 +117,25 @@ struct RamSampler
 end
 
 
-struct BootstrapSolverObj{T1<:MArray,
-                          T2<:MArray,
-                          T3<:MArray,
-                          T4<:AbstractFloat}
+struct BootstrapFilterEMCache{T1 <: AbstractFloat}
 
-    alpha_vec::T1
-    beta_mat::T2
-    x_vec::T3
-    Δt::Vector{T4}
-    sqrt_Δt::Vector{T4}
-end
-
-
-struct BootstrapFilterArr{T1<:Array{UInt32, 1}, 
-                          T2<:Array{Int64, 1},
-                          T3<:Array{Float64, 2}, 
-                          T4<:Array{Float64, 1}}
-    i_resamp::T1
-    i_sort_corr::T2
-    x0_mat::T3
-    x_curr::T3
-    w_unormalised::T4
-    w_normalised::T4
+    #=                              
+    beta::MMatrix{S, S, T1}
+    alpha::MVector{S, T1}
+    x::MVector{S, T1}
+    u::MVector{S, T1}
+    beta_times_u::MVector{S, T1}
+    y_model::Vector{T1}
+    =#
+    beta::Matrix{T1}
+    alpha::Vector{T1}
+    x::Vector{T1}
+    u::Vector{T1}
+    y_model::Vector{T1}
+    w_unormalised::Vector{T1} # Unormalised particle filter weights 
+    w_normalised::Vector{T1} # Normalised particle filter weights 
+    particles::Matrix{T1} # Current value for particles (dim_x × n_particles)
+    index_resample::Vector{UInt32}
 end
 
 
@@ -262,11 +258,9 @@ time-points.
 
 See also: [`create_rand_num`](@ref)
 """
-struct RandomNumbers{T1<:Array{<:Array{<:AbstractFloat, 2}, 1}, 
-                     T2<:Array{<:AbstractFloat, 1}}
-
-    u_prop::T1
-    u_resamp::T2
+struct RandomNumbers{T<:AbstractFloat}
+    u_prop::Vector{Matrix{T}}
+    u_resamp::Vector{T}
 end
 
 
@@ -297,9 +291,9 @@ Bootstrap-filter with n-particles for SDE:s, where the SDE is solved by the Eule
 
 If correlation ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
 """
-struct BootstrapFilterEM{T1<:AbstractFloat, T2<:Signed}
+struct BootstrapFilterEM{T1<:AbstractFloat}
     Δt::T1
-    n_particles::T2
+    n_particles::Int64
     ρ::T1    
 end
 """
@@ -323,9 +317,9 @@ Modified-diffusion guided particle-filter with n-particles for SDE:s, where the 
 
 If correlation ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
 """
-struct ModifedDiffusionBridgeFilter{T1<:AbstractFloat, T2<:Signed}
+struct ModifedDiffusionBridgeFilter{T1<:AbstractFloat}
     Δt::T1
-    n_particles::T2
+    n_particles::Int64
     ρ::T1    
 end
 """
@@ -363,7 +357,7 @@ struct TuneParticlesIndividual{T1<:Signed,
     init_ind_param
     init_error
     n_times_run_filter::T3
-    rho_list::T5
+    ρ_list::T5
 end
 
 

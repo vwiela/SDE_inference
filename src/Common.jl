@@ -9,6 +9,20 @@
 =# 
 
 
+function remake_filter(filter::BootstrapFilterEM; ρ=nothing, n_particles=nothing, Δt=nothing)::BootstrapFilterEM
+    ρ_new = isnothing(ρ) ? filter.ρ : ρ
+    n_particles_new = isnothing(n_particles) ? filter.n_particles : n_particles
+    Δt_new = isnothing(Δt) ? filter.Δt : Δt
+    return BootstrapFilterEM(Δt_new, n_particles_new, ρ_new)
+end
+function remake_filter(filter::ModifedDiffusionBridgeFilter; ρ=nothing, n_particles=nothing, Δt=nothing)::ModifedDiffusionBridgeFilter
+    ρ_new = isnothing(ρ) ? filter.ρ : ρ
+    n_particles_new = isnothing(n_particles) ? filter.n_particles : n_particles
+    Δt_new = isnothing(Δt) ? filter.Δt : Δt
+    return ModifedDiffusionBridgeFilter(Δt_new, n_particles_new, ρ_new)
+end
+
+
 """
     create_n_step_vec(t_vec, Δt)
 
@@ -17,7 +31,7 @@ Calculate number of time-steps for EM-solver between each observed time-point
 The discretization level (Δt) is provided by the user, and should be 
 small enough to ensure accuracy, while keeping computational effiency. 
 """
-function create_n_step_vec(t_vec, Δt)
+function create_n_step_vec(t_vec, Δt)::Vector{Int16}
     # Adapt length of n_step if t[1] != 0
     len_step = 0
     zero_in_t = false
@@ -27,7 +41,7 @@ function create_n_step_vec(t_vec, Δt)
     else
         len_step = length(t_vec)
     end
-    n_step::Array{Int16, 1} = Array{Int16, 1}(undef, len_step)
+    n_step::Vector{Int16} = Vector{Int16}(undef, len_step)
     i_n_step = 1
 
     # Special case where t = 0 is not observed

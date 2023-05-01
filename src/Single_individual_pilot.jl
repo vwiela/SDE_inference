@@ -241,7 +241,7 @@ function run_pilot_run(n_samples, mcmc_sampler, param_info, model,
         CSV.write(file_name, data_save)
     else 
         data_central_pos = CSV.read(file_name, DataFrame)
-        i_exp = maximum(data_central_pos["i_exp"]) + 1
+        i_exp = maximum(data_central_pos[!, "i_exp"]) + 1
         data_save = DataFrame(cent_pos_val = central_pos_val[:, 1], 
             init_val = init_value, 
             n_particles = repeat([filter.n_particles], n_param), 
@@ -289,8 +289,8 @@ function investigate_different_particles(n_times_run_filter,
     times_correct = 0
     while particles_use < 5000
 
-        filter_var = change_filter_opt(filter_opt, particles_use, 0.0)
-        filter_use = change_filter_opt(filter_opt, particles_use, filter_opt.ρ)
+        filter_var = remake_filter(filter_opt, n_particles=particles_use, ρ =0.0)
+        filter_use = remake_filter(filter_opt, n_particles=particles_use, ρ=filter_opt.ρ)
 
         j = 1
         log_lik_vals::Array{Float64, 1} = Array{Float64, 1}(undef, n_times_run_filter)
@@ -391,15 +391,15 @@ function tune_particles_single_individual(pilot_run_info,
     i_range_ind = 1:length(param_info.prior_ind_param)
     i_range_error = length(param_info.prior_ind_param)+1:n_param_infer
 
-    for i in 1:length(pilot_run_info)
+    for i in eachindex(pilot_run_info)
         # Run for the different correlation levels for a specific start-guess 
         pilot_run_data = pilot_run_info[i]
         ρ_list = pilot_run_data.ρ_list
         n_times_run_filter = pilot_run_data.n_times_run_filter
-        for j in 1:length(ρ_list)
+        for j in eachindex(ρ_list)
 
             # Ensure correct parameters for running the pilot-run 
-            filter_pilot = change_filter_opt(filter, pilot_run_data.n_particles_pilot, ρ_list[j])
+            filter_pilot = remake_filter(filter, n_particles=pilot_run_data.n_particles_pilot, ρ=ρ_list[j])
             param_info_pilot = change_param_info(param_info, 
                                                  pilot_run_data.init_ind_param, 
                                                  pilot_run_data.init_error)
@@ -554,7 +554,6 @@ function init_filter_pilot(filter_opt, file_loc, ρ, sampler_name; exp_tag::T=1)
     
     n_particles_use = convert(Int64, readdlm(file_data, '\t', Float64, '\n')[1, 1])
 
-    filter_use = change_filter_opt(filter_opt, n_particles_use, ρ)
+    filter_use = remake_filter(filter_opt, n_particles=n_particles_use, ρ=ρ)
     return filter_use 
-
 end
