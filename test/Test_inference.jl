@@ -233,8 +233,8 @@ sd_bootstrap = std(samples_bootstrap[:, burn_in:end], dims=2)
 sd_bridge = std(samples_bridge[:, burn_in:end], dims=2)
 
 @testset "Testing particle filters against Ornsten model" begin
-    @test all(abs.(median_kalman .- median_bootstrap) .≤ 0.08)
-    @test all(abs.(median_kalman .- median_bridge) .≤ 0.08)
-    @test all(abs.(sd_kalman .- sd_bootstrap) .≤ 0.08)
-    @test all(abs.(sd_kalman .- sd_bridge) .≤ 0.08)
+    @test all(abs.(median_kalman .- median_bootstrap) .≤ 0.05)
+    @test all(abs.(median_kalman .- median_bridge) .≤ 0.05)
+    @test all(abs.(sd_kalman .- sd_bootstrap) .≤ 0.06)
+    @test all(abs.(sd_kalman .- sd_bridge) .≤ 0.06)
 end

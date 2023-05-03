@@ -301,7 +301,7 @@ running sampler in pilot-run setting.
 
 See also: [`run_pilot_run`](@ref)
 """
-function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; pilot=false)
+function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model::SdeModel, file_loc; pilot=false)
 
     # Set up correct file-locations
     calc_dir_save!(file_loc, filter, mcmc_sampler)
@@ -335,11 +335,14 @@ function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; 
                                           i_range_ind, i_range_error)
 
     # Print some data 
-    @printf("Running single individual inference with: ")
-    @printf("%d particles and correlation level %.3f\n", n_particles, filter.ρ)
+    str_write = @sprintf("Running inference with %d particles and correlation level %.3f\n", n_particles, filter.ρ)
+    @info "$str_write"
 
     # Initialise the random numbers 
     rand_num_old = create_rand_num(ind_data, model, filter)
+
+    # Cache with vectors required by particle filter 
+    filter_cache = create_cache(filter, Val(model.dim_obs), Val(model.dim), Val(size(model.P_mat)[2]), model.P_mat)
 
     # Storing the log-likelihood values 
     log_lik_val = Array{Float64, 1}(undef, n_samples)
@@ -347,10 +350,11 @@ function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; 
     # Calculate likelihood, jacobian and prior for initial parameters 
     log_prior_old = calc_log_prior(x_old, prior_dists, n_param_infer)
     log_jacobian_old = calc_log_jac(x_old, positive_proposal, n_param_infer)
-    log_lik_old = run_filter(filter, mod_param, rand_num_old, 
-            model, ind_data)
+    log_lik_old = run_filter(filter, mod_param, rand_num_old, filter_cache, model, ind_data, Val(filter.is_correlated))
     log_lik_val[1] = log_lik_old
-    @printf("Log_lik_start = %.3f\n", log_lik_old)
+
+    str_write = @sprintf("Log_lik_start = %.3f\n", log_lik_old)
+    @info "$str_write"
 
     # Run mcmc-sampling 
     @showprogress 1 "Running sampler..." for i in 2:n_samples
@@ -368,7 +372,7 @@ function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; 
         log_prior_new = calc_log_prior(x_prop, prior_dists, n_param_infer)
         log_jacobian_new = calc_log_jac(x_prop, positive_proposal, n_param_infer)
 
-        log_lik_new = run_filter(filter, mod_param, rand_num_new, model, ind_data)
+        log_lik_new = run_filter(filter, mod_param, rand_num_new, filter_cache, model, ind_data, Val(filter.is_correlated))
 
         # Acceptange probability
         log_u = log(rand())

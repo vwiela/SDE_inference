@@ -626,3 +626,43 @@ function empty_dist()::Array{Normal{Float64}, 1}
 end
 
 
+function create_cache(filter::BootstrapFilterEM, ::Val{dim_obs}, ::Val{dim_sde}, ::Val{dim_p}, P_mat) where {dim_obs, dim_sde, dim_p}
+    
+    beta = MMatrix{dim_sde, dim_sde, Float64}(undef)
+    alpha = MVector{dim_sde, Float64}(undef)
+    x = MVector{dim_sde, Float64}(undef)
+    u = MVector{dim_sde, Float64}(undef)
+    y_model::Vector{Float64} = Vector{Float64}(undef, dim_obs)
+    w_unormalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    w_normalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    particles::Matrix{Float64} = Matrix{Float64}(undef, dim_sde, filter.n_particles)
+    index_resample::Vector{UInt32} = Vector{UInt32}(undef, filter.n_particles)
+
+    return BootstrapFilterEMCache(beta, alpha, x, u,  y_model, w_unormalised, w_normalised, particles, index_resample)
+end
+function create_cache(filter::ModifedDiffusionBridgeFilter, ::Val{dim_obs}, ::Val{dim_sde}, ::Val{dim_p}, P_mat) where {dim_obs, dim_sde, dim_p}
+    
+    μ = MVector{dim_sde, Float64}(undef)
+    alpha = MVector{dim_sde, Float64}(undef)
+    Ω = MMatrix{dim_sde, dim_sde, Float64}(undef)
+    beta = MMatrix{dim_sde, dim_sde, Float64}(undef)
+    Σ = MMatrix{dim_obs, dim_obs, Float64}(undef)
+    P = MMatrix{dim_sde, dim_p, Float64}(undef) 
+    P_T = MMatrix{dim_p, dim_sde, Float64}(undef)
+    P .= P_mat
+    P_T .= transpose(P_mat)
+    x = MVector{dim_sde, Float64}(undef)
+    y_obs = MVector{dim_obs, Float64}(undef)
+    u = MVector{dim_sde, Float64}(undef)
+    μ_EM_pdf = MVector{dim_sde, Float64}(undef)
+    μ_bridge_pdf = MVector{dim_sde, Float64}(undef)
+    y_model::Vector{Float64} = Vector{Float64}(undef, dim_obs)
+    w_unormalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    w_normalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    particles::Matrix{Float64} = Matrix{Float64}(undef, dim_sde, filter.n_particles)
+    logpdf_bridge::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    logpdf_EM::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    index_resample::Vector{UInt32} = Vector{UInt32}(undef, filter.n_particles)
+
+    return ModifiedBridgeFilterCache(μ, alpha, Ω, beta, Σ, P, P_T, x, y_obs, u, μ_EM_pdf, μ_bridge_pdf, y_model, w_unormalised, w_normalised, particles, logpdf_bridge, logpdf_EM, index_resample)
+end

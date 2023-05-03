@@ -30,9 +30,7 @@ function step_em_bootstrap!(filter_cache::BootstrapFilterEMCache,
     sde_mod.calc_alpha(filter_cache.alpha, filter_cache.x, p, t)
     sde_mod.calc_beta(filter_cache.beta, filter_cache.x, p, t)
     calc_cholesky!(filter_cache.beta, sde_mod.dim)
-
-    mul!(filter_cache.alpha, filter_cache.beta, filter_cache.u, sqrt_Δt, Δt)
-    filter_cache.x .+= filter_cache.alpha
+    filter_cache.x .+= filter_cache.alpha .* Δt .+ filter_cache.beta * filter_cache.u .* sqrt_Δt
 end
 
 
@@ -112,7 +110,8 @@ function run_filter(filt_opt::BootstrapFilterEM,
                     random_numbers::RandomNumbers,
                     filter_cache::BootstrapFilterEMCache, 
                     sde_mod::SdeModel, 
-                    individual_data::IndData)::Float64
+                    individual_data::IndData, 
+                    ::Val{is_correlated})::Float64 where {is_correlated}
 
     # Extract individual parameters for propegation 
     n_particles::Int64 = filt_opt.n_particles
@@ -127,13 +126,12 @@ function run_filter(filt_opt::BootstrapFilterEM,
     n_particles_inv::Float64 = 1.0 / n_particles
     log_lik::Float64 = 0.0
     
-    # Pre-allocated variables required for looping in the filter 
     # Calculate initial values for particles (states)
     @inbounds for i in 1:n_particles
         sde_mod.calc_x0!((@view filter_cache.particles[:, i]), model_parameters)
     end
     
-    u_resample::Vector{Float64} = filt_opt.ρ != 0.0 ? cdf(Normal(), random_numbers.u_resamp) : random_numbers.u_resamp
+    u_resample::Vector{Float64} = is_correlated ? cdf(Normal(), random_numbers.u_resamp) : random_numbers.u_resamp
 
     # Propegate particles for t1 
     i_u_prop::Int64 = 1  # Which discretization level to access 
@@ -154,12 +152,11 @@ function run_filter(filt_opt::BootstrapFilterEM,
     sum_w_unormalised::Float64 = calc_weights_bootstrap!(1, filter_cache, c, t_vec[1], error_param, sde_mod, y_mat, n_particles)
     log_lik += log(sum_w_unormalised * n_particles_inv)
 
-    b_time = 0
     # Propegate over remaning time-steps 
     for i_t_vec in 2:1:len_t_vec    
         
         # If correlated, sort x_curr
-        if filt_opt.ρ != 0
+        if is_correlated
             data_sort = sum(filter_cache.particles.^2, dims=1)[1, :]
             i_sort = sortperm(data_sort)
             filter_cache.particles .= filter_cache.particles[:, i_sort]
@@ -172,14 +169,12 @@ function run_filter(filt_opt::BootstrapFilterEM,
         
         # Variables for propeating correct particles  
         t_step_info = TimeStepInfo(t_vec[i_t_vec-1], t_vec[i_t_vec], n_step_vec[i_u_prop])   
-        b_time += @elapsed begin
         try 
             propegate_em_bootstrap!(filter_cache, c, t_step_info, sde_mod, n_particles, random_numbers.u_prop[i_u_prop])         
         catch 
             return -Inf 
         end
         i_u_prop += 1
-        end
         
         # Update weights and calculate likelihood
         sum_w_unormalised = calc_weights_bootstrap!(i_t_vec, filter_cache, c, t_vec[i_t_vec], error_param, sde_mod, y_mat, n_particles)
