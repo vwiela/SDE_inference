@@ -130,16 +130,10 @@ struct BootstrapFilterEMCache{T1 <: MVector,
     w_normalised::Vector{T3} # Normalised particle filter weights 
     particles::Matrix{T3} # Current value for particles (dim_x × n_particles)
     index_resample::Vector{UInt32}
+    index_sort::Vector{UInt32}
 end
 
 
-"""
-    DiffBridgeSolverObj
-
-Drift, diffusion, observation, and state-arrays + step-length when propegating via the modifed diffusion bridge. 
-
-Pre-allocated for computational efficiency. 
-"""
 struct ModifiedBridgeFilterCache{T1<:MVector,
                                  T2<:MMatrix,
                                  T3<:MMatrix,
@@ -167,6 +161,7 @@ struct ModifiedBridgeFilterCache{T1<:MVector,
     logpdf_bridge::Vector{T7}
     logpdf_EM::Vector{T7}
     index_resample::Vector{UInt32}
+    index_sort::Vector{UInt32}
 end
 
 

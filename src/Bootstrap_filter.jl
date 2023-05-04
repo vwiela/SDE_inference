@@ -156,11 +156,11 @@ function run_filter(filt_opt::BootstrapFilterEM,
     for i_t_vec in 2:1:len_t_vec    
         
         # If correlated, sort x_curr
-        if is_correlated
+        if is_correlated            
             data_sort = sum(filter_cache.particles.^2, dims=1)[1, :]
-            i_sort = sortperm(data_sort)
-            filter_cache.particles .= filter_cache.particles[:, i_sort]
-            filter_cache.w_normalised .= filter_cache.w_normalised[i_sort]
+            sortperm!(filter_cache.index_sort, data_sort)
+            filter_cache.particles .= filter_cache.particles[:, filter_cache.index_sort]
+            permute!(filter_cache.w_normalised, filter_cache.index_sort)
         end
 
         _u_resample = u_resample[i_t_vec-1]
