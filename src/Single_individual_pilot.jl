@@ -291,13 +291,14 @@ function investigate_different_particles(n_times_run_filter,
 
         filter_var = remake_filter(filter_opt, n_particles=particles_use, ρ =0.0)
         filter_use = remake_filter(filter_opt, n_particles=particles_use, ρ=filter_opt.ρ)
+        filter_cache_var = create_cache(filter_var, Val(model.dim_obs), Val(model.dim), Val(size(model.P_mat)[2]), model.P_mat)
+        filter_cache_use = create_cache(filter_use, Val(model.dim_obs), Val(model.dim), Val(size(model.P_mat)[2]), model.P_mat)
 
         j = 1
         log_lik_vals::Array{Float64, 1} = Array{Float64, 1}(undef, n_times_run_filter)
         rand_num_var = create_rand_num(ind_data, model, filter_var)
         while j < (n_times_run_filter + 1)
-            log_lik = run_filter(filter_var, mod_param, rand_num_var, 
-                                      model, ind_data)
+            log_lik = run_filter(filter_var, mod_param, rand_num_var, filter_cache_var, model, ind_data, Val(filter_var.is_correlated))
             if log_lik == -Inf
                 @printf("Infinity")
                 continue
@@ -324,10 +325,8 @@ function investigate_different_particles(n_times_run_filter,
                 update_random_numbers!(rand_num2, filter_use)
 
                 # Important to not use variance filter here 
-                log_lik1 = run_filter(filter_use, mod_param, rand_num1, 
-                                           model, ind_data)
-                log_lik2 = run_filter(filter_use, mod_param, rand_num2, 
-                                           model, ind_data)
+                log_lik1 = run_filter(filter_use, mod_param, rand_num1, filter_cache_use, model, ind_data, Val(filter_use.is_correlated))
+                log_lik2 = run_filter(filter_use, mod_param, rand_num2, filter_cache_use, model, ind_data, Val(filter_use.is_correlated))
 
                 if log_lik1 == -Inf || log_lik2 == -Inf
                     continue
