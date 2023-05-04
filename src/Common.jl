@@ -13,15 +13,16 @@ function remake_filter(filter::BootstrapFilterEM; ρ=nothing, n_particles=nothin
     ρ_new = isnothing(ρ) ? filter.ρ : ρ
     n_particles_new = isnothing(n_particles) ? filter.n_particles : n_particles
     Δt_new = isnothing(Δt) ? filter.Δt : Δt
-    return BootstrapFilterEM(Δt_new, n_particles_new, ρ_new)
+    is_correlated = ρ_new != 0.0
+    return BootstrapFilterEM(Δt_new, n_particles_new, ρ_new, is_correlated)
 end
 function remake_filter(filter::ModifedDiffusionBridgeFilter; ρ=nothing, n_particles=nothing, Δt=nothing)::ModifedDiffusionBridgeFilter
     ρ_new = isnothing(ρ) ? filter.ρ : ρ
     n_particles_new = isnothing(n_particles) ? filter.n_particles : n_particles
     Δt_new = isnothing(Δt) ? filter.Δt : Δt
-    return ModifedDiffusionBridgeFilter(Δt_new, n_particles_new, ρ_new)
+    is_correlated = ρ_new != 0.0
+    return ModifedDiffusionBridgeFilter(Δt_new, n_particles_new, ρ_new, is_correlated)
 end
-
 
 """
     create_n_step_vec(t_vec, Δt)

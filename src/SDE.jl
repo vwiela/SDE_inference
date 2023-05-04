@@ -41,7 +41,7 @@ end
     init_sde_model(calc_alpha, calc_beta, calc_x0, calc_obs, calc_prob_obs, dim_mod::T1, dim_obs::T1, P_mat::T2)::SdeModel where {T1<:Signed, T2<:Array{Int64}}
 
 Option where P-matrix is provided and thus assumed that observation model 
-is not on the format y = P*X + ε, ε ~ N(0, σ^2). This makes a SDE-model compatible with 
+is on the format y = P*X + ε, ε ~ N(0, σ^2). This makes a SDE-model compatible with 
 the modified-diffusion bridge filter. 
 """
 function init_sde_model(calc_alpha, 

@@ -27,7 +27,7 @@ export tune_particles_single_individual
 export change_start_val_to_pilots
 export init_mcmc_pilot
 export init_filter
-export BootstrapEm
+export BootstrapFilterEM
 export run_mcmc
 
 
