@@ -46,7 +46,7 @@ sde_mod = init_sde_model(alpha_ornstein_full,
                          calc_x0_ornstein!, 
                          ornstein_obs, 
                          prob_ornstein_full,
-                         1, 1)
+                         1, 1, ones(Int64, 1, 1))
 
 # Set up inference options 
 param_info = init_param([Normal(0.0, 1.0), Normal(2.0, 1.0), Normal(-1.0, 1.0)], 
@@ -56,7 +56,7 @@ param_info = init_param([Normal(0.0, 1.0), Normal(2.0, 1.0), Normal(-1.0, 1.0)],
                         error_param_pos=true)
 # Filter information 
 dt = 1e-2
-filter_opt = BootstrapFilterEM(dt, 100, correlation=0.99)
+filter_opt = BootstrapFilterEM(dt, 40, correlation=0.99)
 
 # Set file paths 
 path_data = joinpath(@__DIR__, "Ornstein_model", "Simulated_data.csv")
@@ -105,7 +105,7 @@ sde_mod = init_sde_model(alpha_ornstein_full,
                          P)
 dt = 1e-2
 rho = 0.99 # Correlation level 
-filter_opt = init_filter(ModDiffusion(), dt, rho=rho)
+filter_opt = ModifedDiffusionBridgeFilter(dt, 100, correlation=rho)
 
 # Set file paths 
 path_data = joinpath(@__DIR__, "Ornstein_model", "Simulated_data.csv")
@@ -117,64 +117,41 @@ mcmc_sampler = init_mcmc(RamSampler(), param_info, step_before_update=100, cov_m
 
 # Options for pilot run
 Random.seed!(123)
-pilot_run_info = init_pilot_run([prior_ind_param, prior_error_param], 
-                                 n_particles_pilot=100, 
-                                 n_samples_pilot=3000,
-                                 n_particles_investigate=[20, 50],
-                                 n_times_run_filter=200,
-                                 rho_list=[0.99])
+param_info = init_param([Normal(0.0, 1.0), Normal(2.0, 1.0), Normal(-1.0, 1.0)], 
+                        [Gamma(1.0, 0.4)], 
+                        ind_param_pos=false, 
+                        ind_param_log=true,
+                        error_param_pos=true)
 tune_particles_single_individual(pilot_run_info, mcmc_sampler, param_info, filter_opt, sde_mod, deepcopy(file_loc))
 
 # Main inference run 
 # Get values from pilot run 
 Random.seed!(123)
 param_info_new = change_start_val_to_pilots(param_info, file_loc, filter_opt, sampler_name = "Ram_sampler")
-mcmc_sampler = init_mcmc_pilot(mcmc_sampler, file_loc, filter_opt.rho)
+mcmc_sampler = init_mcmc_pilot(mcmc_sampler, file_loc, rho)
 # Actual main run 
-filter_opt = init_filter(ModDiffusion(), dt, rho=rho, n_particles=10) # From pilot run use 10 particles 
+dt = 1e-2
+filter_opt = ModifedDiffusionBridgeFilter(dt, 10)
 samples, log_lik_val, sampler = run_mcmc(50000, mcmc_sampler, param_info_new, filter_opt, sde_mod, deepcopy(file_loc))  
 
 burn_in = 20000
 p1 = density(samples[1, burn_in:end])
-p1 = vline!([-0.7])
+p1 = vline!([0.1])
 p2 = density(samples[2, burn_in:end])
 p2 = vline!([2.3])
 p3 = density(samples[3, burn_in:end])
 p3 = vline!([-0.9])
 
 
-
-function create_cache(n_particles, dim_obs, D) 
-    #=
-    beta = MMatrix{D, D, Float64}(undef)
-    alpha = MVector{D, Float64}(undef)
-    x = MVector{D, Float64}(undef)
-    u = MVector{D, Float64}(undef)
-    =#
-    beta = zeros(Float64, D, D)
-    alpha = Vector{Float64}(undef, D)
-    x = Vector{Float64}(undef, D)
-    u = Vector{Float64}(undef, D)
-    y_model::Vector{Float64} = Vector{Float64}(undef, dim_obs)
-    w_unormalised::Vector{Float64} = Vector{Float64}(undef, n_particles)
-    w_normalised::Vector{Float64} = Vector{Float64}(undef, n_particles)
-    particles::Matrix{Float64} = Matrix{Float64}(undef, D, n_particles)
-    index_resample::Vector{UInt32} = Vector{UInt32}(undef, n_particles)
-
-    print("Beta = $beta\n")
-    return BootstrapFilterEMCache(beta, alpha, x, u,  y_model, w_unormalised, w_normalised, particles, index_resample)
-end
-
+#=
 dt=1e-2
 filter_opt = BootstrapFilterEM(dt, 40, correlation=0.99)
-filter_cache = create_cache(filter_opt.n_particles, sde_mod.dim_obs, sde_mod.dim)
-
+filter_cache = create_cache(filter_opt, Val(sde_mod.dim_obs), Val(sde_mod.dim), Val(1), sde_mod.P_mat)
 path_data = joinpath(@__DIR__, "Ornstein_model", "Simulated_data.csv")
 ind_data = init_ind_data(CSV.read(path_data, DataFrame), filter_opt)
-
 mod_param = ModelParameters(DynModInput(exp.([0.1, 2.3, -0.9]), Float64[], Float64[]), Float64[], [0.3], Float64[])
-
 random_numbers = create_rand_num(ind_data, sde_mod, filter_opt)
+log_lik = run_filter(filter_opt, mod_param, random_numbers, filter_cache, sde_mod, ind_data, Val(filter_opt.is_correlated))
+@allocated log_lik = run_filter(filter_opt, mod_param, random_numbers, filter_cache, sde_mod, ind_data, Val(filter_opt.is_correlated))
 bTime =  @elapsed log_lik = run_filter(filter_opt, mod_param, random_numbers, filter_cache, sde_mod, ind_data)
-
-
+=#
