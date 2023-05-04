@@ -220,111 +220,6 @@ function map_proposal_to_model_parameters_ind!(mod_param,
 end
 
 
-"""
-    posterior_vc(samples, model::SdeModel, file_loc, param_info, filter, ind_data; 
-        burn_in=0.2, dt=1e-2, n_runs=10000)
-
-Run posterior visual-check for single-individual inference results. 
-
-Writes the 0.05, 0.5 and 0.95 quantiles to file when taking n_runs samples 
-from the sampled posterior (samples), using a burn_in factor of 0.2. ind-data 
-and param_info structs ensures correct parameter transformations and time-intervall
-when simulating the model. 
-
-For a SDE-model default time-stepping for Euler-Maruyama equals 1e-2. 
-"""
-function posterior_vc(samples, model::SdeModel, file_loc, param_info, filter, ind_data; 
-    burn_in=0.2, dt=1e-2, n_runs=10000)
-
-    # Assuming time-spans always starts at zero 
-    time_span = [0.0, ind_data.t_vec[end]]
-
-    # Matrix for storing results 
-    n_col_sol = length(time_span[1]:dt:time_span[2])
-    sol_mat = zeros(model.dim_obs*n_runs, n_col_sol)
-    t_vec = time_span[1]:dt:time_span[2]
-
-    # Remove burn in samples 
-    n_samples = size(samples)[2]
-    min_sample_use = convert(Int, floor(n_samples*burn_in))
-    samples_use = samples[:, min_sample_use:end]
-    
-    # Indices for random-posterior samples 
-    index_sample = rand(DiscreteUniform(1, size(samples_use)[2]), n_runs)
-
-    # Correctly map sampled parameters to model 
-    mod_param = init_model_parameters(param_info.init_ind_param, 
-                                      param_info.init_error_param, 
-                                      model, 
-                                      covariates=ind_data.cov_val)
-    n_param_infer = length(param_info.prior_ind_param) + length(param_info.prior_error_param)
-    i_range_ind = 1:length(param_info.prior_ind_param)
-    i_range_error = length(param_info.prior_ind_param)+1:n_param_infer
-
-    # Run SDE-multiple times 
-    for i in 1:n_runs
-        # Sample parameter vector and extract model parameters 
-        sample_i = samples_use[:, index_sample[i]]
-        map_proposal_to_model_parameters_ind!(mod_param, sample_i, param_info, i_range_ind, i_range_error)
-        c = mod_param.individual_parameters
-        u0 = mod_param.x0
-
-        t_vec1, u_mat1 = solve_sde_em(model, time_span, u0, c, dt)
-        i_low = model.dim_obs * i - (model.dim_obs - 1)
-        i_upp = model.dim_obs * i
-
-        # Calculate observed output 
-        y_vec = Array{Float64, 1}(undef, model.dim_obs)
-        for j in 1:n_col_sol
-            model.calc_obs(y_vec, u_mat1[1:model.dim, j], c, 0.0)
-            sol_mat[i_low:i_upp, j] .= y_vec
-        end
-    end
-
-    # Aggregate the median and mean values, note the first
-    # three columns are the first state, the second pair is the
-    # second state etc.
-    quant = zeros(model.dim_obs*3, n_col_sol)
-    for i in 1:model.dim_obs
-        i_rows = i:model.dim_obs:(n_runs*model.dim_obs)
-        start_index = (i - 1) *3 + 1
-        quant[start_index, :] = median(sol_mat[i_rows, :], dims=1)
-        # Fixing the quantiles
-        for j in 1:n_col_sol
-            i_low = start_index+1
-            i_upp = start_index+2
-            quant[i_low:i_upp, j] = quantile(sol_mat[i_rows, j], [0.05, 0.95])
-        end
-    end
-
-    # Save the results 
-    file_name = "pVC_" * file_loc.model_name * 
-        "_npart" * string(filter.n_particles) * 
-        "_nsamp" * string(n_samples) * 
-        "_corr" * string(filter.ρ) * ".csv"
-    path_save = file_loc.dir_save * "/" * file_name
-    # Aggregate data 
-    full_data = vcat(quant, collect(t_vec)')'
-    data_save = DataFrame(full_data)
-    # Ensure correct column-names 
-    col_names = Array{String, 1}(undef, model.dim_obs*3 + 1)
-    for i in 1:model.dim_obs
-        med_tag = "y" * string(i) * "_med"
-        q1_tag = "y" * string(i) * "_qu05"
-        q2_tag = "y" * string(i) * "_qu95"
-
-        col_names[(i-1)*3+1] = med_tag
-        col_names[(i-1)*3+2] = q1_tag
-        col_names[(i-1)*3+3] = q2_tag
-    end
-    col_names[end] = "time"
-    
-    rename!(data_save, col_names)
-    CSV.write(path_save, data_save)
-
-end
-
-
 
 """
     write_result_to_file(samples, log_lik_val, param_info, filter, file_loc)
@@ -366,8 +261,6 @@ function write_result_to_file(samples, log_lik_val, param_info, filter, file_loc
         end
     end
 
-    dir_save = 
-
     col_names = Array{String, 1}(undef, n_param + 1)
     j = 1
     for i in 1:n_ind_param
@@ -408,7 +301,7 @@ running sampler in pilot-run setting.
 
 See also: [`run_pilot_run`](@ref)
 """
-function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; pilot=false)
+function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model::SdeModel, file_loc; pilot=false)
 
     # Set up correct file-locations
     calc_dir_save!(file_loc, filter, mcmc_sampler)
@@ -442,11 +335,14 @@ function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; 
                                           i_range_ind, i_range_error)
 
     # Print some data 
-    @printf("Running single individual inference with: ")
-    @printf("%d particles and correlation level %.3f\n", n_particles, filter.ρ)
+    str_write = @sprintf("Running inference with %d particles and correlation level %.3f\n", n_particles, filter.ρ)
+    @info "$str_write"
 
     # Initialise the random numbers 
     rand_num_old = create_rand_num(ind_data, model, filter)
+
+    # Cache with vectors required by particle filter 
+    filter_cache = create_cache(filter, Val(model.dim_obs), Val(model.dim), Val(size(model.P_mat)[2]), model.P_mat)
 
     # Storing the log-likelihood values 
     log_lik_val = Array{Float64, 1}(undef, n_samples)
@@ -454,10 +350,11 @@ function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; 
     # Calculate likelihood, jacobian and prior for initial parameters 
     log_prior_old = calc_log_prior(x_old, prior_dists, n_param_infer)
     log_jacobian_old = calc_log_jac(x_old, positive_proposal, n_param_infer)
-    log_lik_old = run_filter(filter, mod_param, rand_num_old, 
-            model, ind_data)
+    log_lik_old = run_filter(filter, mod_param, rand_num_old, filter_cache, model, ind_data, Val(filter.is_correlated))
     log_lik_val[1] = log_lik_old
-    @printf("Log_lik_start = %.3f\n", log_lik_old)
+
+    str_write = @sprintf("Log_lik_start = %.3f\n", log_lik_old)
+    @info "$str_write"
 
     # Run mcmc-sampling 
     @showprogress 1 "Running sampler..." for i in 2:n_samples
@@ -475,8 +372,7 @@ function run_mcmc(n_samples, mcmc_sampler, param_info, filter, model, file_loc; 
         log_prior_new = calc_log_prior(x_prop, prior_dists, n_param_infer)
         log_jacobian_new = calc_log_jac(x_prop, positive_proposal, n_param_infer)
 
-        log_lik_new = run_filter(filter, mod_param, rand_num_new, 
-                model, ind_data)
+        log_lik_new = run_filter(filter, mod_param, rand_num_new, filter_cache, model, ind_data, Val(filter.is_correlated))
 
         # Acceptange probability
         log_u = log(rand())

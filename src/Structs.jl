@@ -117,57 +117,51 @@ struct RamSampler
 end
 
 
-struct BootstrapSolverObj{T1<:MArray,
-                          T2<:MArray,
-                          T3<:MArray,
-                          T4<:AbstractFloat}
+struct BootstrapFilterEMCache{T1 <: MVector, 
+                              T2 <: MMatrix, 
+                              T3 <: AbstractFloat}
 
-    alpha_vec::T1
-    beta_mat::T2
-    x_vec::T3
-    Δt::Vector{T4}
-    sqrt_Δt::Vector{T4}
+    beta::T2
+    alpha::T1
+    x::T1
+    u::T1
+    y_model::Vector{T3}
+    w_unormalised::Vector{T3} # Unormalised particle filter weights 
+    w_normalised::Vector{T3} # Normalised particle filter weights 
+    particles::Matrix{T3} # Current value for particles (dim_x × n_particles)
+    index_resample::Vector{UInt32}
+    index_sort::Vector{UInt32}
 end
 
 
-struct BootstrapFilterArr{T1<:Array{UInt32, 1}, 
-                          T2<:Array{Int64, 1},
-                          T3<:Array{Float64, 2}, 
-                          T4<:Array{Float64, 1}}
-    i_resamp::T1
-    i_sort_corr::T2
-    x0_mat::T3
-    x_curr::T3
-    w_unormalised::T4
-    w_normalised::T4
-end
+struct ModifiedBridgeFilterCache{T1<:MVector,
+                                 T2<:MMatrix,
+                                 T3<:MMatrix,
+                                 T4<:MMatrix,
+                                 T5<:MMatrix,
+                                 T6<:MVector,
+                                 T7<:AbstractFloat}
 
-
-"""
-    DiffBridgeSolverObj
-
-Drift, diffusion, observation, and state-arrays + step-length when propegating via the modifed diffusion bridge. 
-
-Pre-allocated for computational efficiency. 
-"""
-struct DiffBridgeSolverObj{T1<:MArray,
-                           T2<:MArray,
-                           T3<:MArray,
-                           T4<:SArray,
-                           T5<:SArray,
-                           T6<:MArray,
-                           T7<:Array{<:AbstractFloat, 1}}
-
-    mean_vec::T1
-    alpha_vec::T1
-    cov_mat::T2
-    beta_mat::T2
-    sigma_mat::T3
-    P_mat::T4
-    P_mat_t::T5
-    x_vec::T6
-    Δt::T7
-    sqrt_Δt::T7
+    μ::T1
+    alpha::T1
+    Ω::T2
+    beta::T2
+    Σ::T3
+    P::T4
+    P_T::T5
+    y_obs::T6
+    x::T1
+    u::T1
+    μ_EM_pdf::T1
+    μ_bridge_pdf::T1
+    y_model::Vector{T7}
+    w_unormalised::Vector{T7} # Unormalised particle filter weights 
+    w_normalised::Vector{T7} # Normalised particle filter weights 
+    particles::Matrix{T7} # Current value for particles (dim_x × n_particles)
+    logpdf_bridge::Vector{T7}
+    logpdf_EM::Vector{T7}
+    index_resample::Vector{UInt32}
+    index_sort::Vector{UInt32}
 end
 
 
@@ -262,11 +256,9 @@ time-points.
 
 See also: [`create_rand_num`](@ref)
 """
-struct RandomNumbers{T1<:Array{<:Array{<:AbstractFloat, 2}, 1}, 
-                     T2<:Array{<:AbstractFloat, 1}}
-
-    u_prop::T1
-    u_resamp::T2
+struct RandomNumbers{T<:AbstractFloat}
+    u_prop::Vector{Matrix{T}}
+    u_resamp::Vector{T}
 end
 
 
@@ -297,10 +289,11 @@ Bootstrap-filter with n-particles for SDE:s, where the SDE is solved by the Eule
 
 If correlation ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
 """
-struct BootstrapFilterEM{T1<:AbstractFloat, T2<:Signed}
+struct BootstrapFilterEM{T1<:AbstractFloat}
     Δt::T1
-    n_particles::T2
+    n_particles::Int64
     ρ::T1    
+    is_correlated::Bool
 end
 """
     BootstrapFilterEM(Δt, n_particles; correlation=0.99)
@@ -312,7 +305,8 @@ Constructor for bootstrap filter for SDE:s. The default correlation level of 0.9
 """
 function BootstrapFilterEM(Δt, n_particles; correlation=0.99)
     @assert correlation < 1 && correlation ≥ 0 "For the bootstrap filter correltation must be in the intervall [0, 1)"
-    return BootstrapFilterEM(Δt, n_particles, correlation)
+    is_correlated = correlation != 0.0
+    return BootstrapFilterEM(Δt, n_particles, correlation, is_correlated)
 end
 
 
@@ -323,10 +317,11 @@ Modified-diffusion guided particle-filter with n-particles for SDE:s, where the 
 
 If correlation ∈ [0.0, 1.0) equals 0.0 the particles are uncorrelated. 
 """
-struct ModifedDiffusionBridgeFilter{T1<:AbstractFloat, T2<:Signed}
+struct ModifedDiffusionBridgeFilter{T1<:AbstractFloat}
     Δt::T1
-    n_particles::T2
+    n_particles::Int64
     ρ::T1    
+    is_correlated::Bool
 end
 """
     ModifedDiffusionBridgeFilter(Δt, n_particles; correlation=0.99)
@@ -338,7 +333,8 @@ Constructor for guided modified diffusion bridge particle filter for SDE:s. The 
 """
 function ModifedDiffusionBridgeFilter(Δt, n_particles; correlation=0.99)
     @assert correlation < 1 && correlation ≥ 0 "For the bootstrap filter correltation must be in the intervall [0, 1)"
-    return ModifedDiffusionBridgeFilter(Δt, n_particles, correlation)
+    is_correlated = correlation != 0.0
+    return ModifedDiffusionBridgeFilter(Δt, n_particles, correlation, is_correlated)
 end
 
 
@@ -363,7 +359,7 @@ struct TuneParticlesIndividual{T1<:Signed,
     init_ind_param
     init_error
     n_times_run_filter::T3
-    rho_list::T5
+    ρ_list::T5
 end
 
 

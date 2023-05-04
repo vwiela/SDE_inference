@@ -9,6 +9,20 @@
 =# 
 
 
+function remake_filter(filter::BootstrapFilterEM; ρ=nothing, n_particles=nothing, Δt=nothing)::BootstrapFilterEM
+    ρ_new = isnothing(ρ) ? filter.ρ : ρ
+    n_particles_new = isnothing(n_particles) ? filter.n_particles : n_particles
+    Δt_new = isnothing(Δt) ? filter.Δt : Δt
+    return BootstrapFilterEM(Δt_new, n_particles_new, ρ_new)
+end
+function remake_filter(filter::ModifedDiffusionBridgeFilter; ρ=nothing, n_particles=nothing, Δt=nothing)::ModifedDiffusionBridgeFilter
+    ρ_new = isnothing(ρ) ? filter.ρ : ρ
+    n_particles_new = isnothing(n_particles) ? filter.n_particles : n_particles
+    Δt_new = isnothing(Δt) ? filter.Δt : Δt
+    return ModifedDiffusionBridgeFilter(Δt_new, n_particles_new, ρ_new)
+end
+
+
 """
     create_n_step_vec(t_vec, Δt)
 
@@ -17,7 +31,7 @@ Calculate number of time-steps for EM-solver between each observed time-point
 The discretization level (Δt) is provided by the user, and should be 
 small enough to ensure accuracy, while keeping computational effiency. 
 """
-function create_n_step_vec(t_vec, Δt)
+function create_n_step_vec(t_vec, Δt)::Vector{Int16}
     # Adapt length of n_step if t[1] != 0
     len_step = 0
     zero_in_t = false
@@ -27,7 +41,7 @@ function create_n_step_vec(t_vec, Δt)
     else
         len_step = length(t_vec)
     end
-    n_step::Array{Int16, 1} = Array{Int16, 1}(undef, len_step)
+    n_step::Vector{Int16} = Vector{Int16}(undef, len_step)
     i_n_step = 1
 
     # Special case where t = 0 is not observed
@@ -612,3 +626,45 @@ function empty_dist()::Array{Normal{Float64}, 1}
 end
 
 
+function create_cache(filter::BootstrapFilterEM, ::Val{dim_obs}, ::Val{dim_sde}, ::Val{dim_p}, P_mat) where {dim_obs, dim_sde, dim_p}
+    
+    beta = MMatrix{dim_sde, dim_sde, Float64}(undef)
+    alpha = MVector{dim_sde, Float64}(undef)
+    x = MVector{dim_sde, Float64}(undef)
+    u = MVector{dim_sde, Float64}(undef)
+    y_model::Vector{Float64} = Vector{Float64}(undef, dim_obs)
+    w_unormalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    w_normalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    particles::Matrix{Float64} = Matrix{Float64}(undef, dim_sde, filter.n_particles)
+    index_resample::Vector{UInt32} = Vector{UInt32}(undef, filter.n_particles)
+    index_sort::Vector{UInt32} = filter.is_correlated ? Vector{UInt32}(undef, filter.n_particles) : Vector{UInt32}(undef, 0)
+
+    return BootstrapFilterEMCache(beta, alpha, x, u,  y_model, w_unormalised, w_normalised, particles, index_resample, index_sort)
+end
+function create_cache(filter::ModifedDiffusionBridgeFilter, ::Val{dim_obs}, ::Val{dim_sde}, ::Val{dim_p}, P_mat) where {dim_obs, dim_sde, dim_p}
+    
+    μ = MVector{dim_sde, Float64}(undef)
+    alpha = MVector{dim_sde, Float64}(undef)
+    Ω = MMatrix{dim_sde, dim_sde, Float64}(undef)
+    beta = MMatrix{dim_sde, dim_sde, Float64}(undef)
+    Σ = MMatrix{dim_obs, dim_obs, Float64}(undef)
+    P = MMatrix{dim_sde, dim_p, Float64}(undef) 
+    P_T = MMatrix{dim_p, dim_sde, Float64}(undef)
+    P .= P_mat
+    P_T .= transpose(P_mat)
+    x = MVector{dim_sde, Float64}(undef)
+    y_obs = MVector{dim_obs, Float64}(undef)
+    u = MVector{dim_sde, Float64}(undef)
+    μ_EM_pdf = MVector{dim_sde, Float64}(undef)
+    μ_bridge_pdf = MVector{dim_sde, Float64}(undef)
+    y_model::Vector{Float64} = Vector{Float64}(undef, dim_obs)
+    w_unormalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    w_normalised::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    particles::Matrix{Float64} = Matrix{Float64}(undef, dim_sde, filter.n_particles)
+    logpdf_bridge::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    logpdf_EM::Vector{Float64} = Vector{Float64}(undef, filter.n_particles)
+    index_resample::Vector{UInt32} = Vector{UInt32}(undef, filter.n_particles)
+    index_sort::Vector{UInt32} = filter.is_correlated ? Vector{UInt32}(undef, filter.n_particles) : Vector{UInt32}(undef, 0)
+
+    return ModifiedBridgeFilterCache(μ, alpha, Ω, beta, Σ, P, P_T, x, y_obs, u, μ_EM_pdf, μ_bridge_pdf, y_model, w_unormalised, w_normalised, particles, logpdf_bridge, logpdf_EM, index_resample, index_sort)
+end
